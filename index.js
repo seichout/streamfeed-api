@@ -18,7 +18,7 @@ app.post('/token', async (req, res) => {
     const { code, code_verifier, redirect_uri, client_id } = req.body;
     
     // X requires client_id as Basic Auth header
-    const basicAuth = Buffer.from(client_id + ':').toString('base64');
+    const basicAuth = Buffer.from(client_id + ':' + process.env.CLIENT_SECRET).toString('base64');
     
     const response = await fetch('https://api.twitter.com/2/oauth2/token', {
       method: 'POST',
