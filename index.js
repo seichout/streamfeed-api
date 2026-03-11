@@ -18,7 +18,7 @@ app.post('/token', async (req, res) => {
     const { code, code_verifier, redirect_uri, client_id } = req.body;
     
     // X requires client_id as Basic Auth header
-    const basicAuth = Buffer.from(client_id + ':' + process.env.CLIENT_SECRET).toString('base64');
+    const basicAuth = Buffer.from(client_id + ':').toString('base64');
     
     const response = await fetch('https://api.twitter.com/2/oauth2/token', {
       method: 'POST',
@@ -54,7 +54,24 @@ app.post('/api', async (req, res) => {
   }
 });
 
+// Proxy image fetch for Claude Vision (bypasses CORS on X CDN)
+app.post('/fetch-image', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'No URL' });
+    const response = await fetch(url);
+    if (!response.ok) return res.status(response.status).json({ error: 'Fetch failed' });
+    const buffer = await response.buffer();
+    const base64 = buffer.toString('base64');
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    res.json({ base64, contentType });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/', (req, res) => res.send('StreamFeed API running!'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('StreamFeed API on port', PORT));
+
