@@ -68,7 +68,7 @@ const STREAM_ACCOUNTS = [
 ];
 
 // Topics rule — high-signal breaking news anyone posts
-const TOPICS_RULE = '(breaking OR "just in" OR developing OR BREAKING) lang:en -is:retweet min_faves:50';
+const TOPICS_RULE = '(breaking OR "just in" OR developing OR BREAKING) lang:en -is:retweet';
 
 // Build streaming rules array from account chunks
 function buildStreamRules() {
@@ -95,23 +95,37 @@ async function syncStreamRules() {
 
     // Delete all existing rules
     if (existingIds.length > 0) {
-      await fetch('https://api.twitter.com/2/tweets/search/stream/rules', {
+      const delRes = await fetch('https://api.twitter.com/2/tweets/search/stream/rules', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + bearer, 'Content-Type': 'application/json' },
         body: JSON.stringify({ delete: { ids: existingIds } })
       });
-      console.log(`[Stream] Deleted ${existingIds.length} old rules`);
+      const delData = await delRes.json();
+      console.log(`[Stream] Deleted ${existingIds.length} old rules:`, JSON.stringify(delData.meta || {}));
+      await new Promise(r => setTimeout(r, 1000)); // let X process deletion
     }
 
-    // Add new rules
+    // Add new rules one at a time to isolate any invalid ones
     const rules = buildStreamRules();
-    const addRes = await fetch('https://api.twitter.com/2/tweets/search/stream/rules', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + bearer, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ add: rules })
-    });
-    const addData = await addRes.json();
-    console.log(`[Stream] Set ${rules.length} rules. Summary:`, JSON.stringify(addData.meta || {}));
+    let created = 0;
+    for (const rule of rules) {
+      try {
+        const addRes = await fetch('https://api.twitter.com/2/tweets/search/stream/rules', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + bearer, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ add: [rule] })
+        });
+        const addData = await addRes.json();
+        if (addData.errors?.length) {
+          console.error(`[Stream] Rule error (${rule.tag}):`, JSON.stringify(addData.errors[0]));
+        } else {
+          created++;
+          console.log(`[Stream] ✅ Rule added: ${rule.tag}`);
+        }
+      } catch(e) { console.error(`[Stream] Rule add failed (${rule.tag}):`, e.message); }
+    }
+    console.log(`[Stream] Rules created: ${created}/${rules.length}`);
+    if (created === 0) { console.error('[Stream] No rules created — aborting'); return false; }
     return true;
   } catch (e) {
     console.error('[Stream] Rule sync failed:', e.message);
